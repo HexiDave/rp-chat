@@ -11,12 +11,14 @@ import org.spongepowered.api.command.args.GenericArguments;
 import org.spongepowered.api.command.spec.CommandExecutor;
 import org.spongepowered.api.command.spec.CommandSpec;
 import org.spongepowered.api.entity.living.player.Player;
+import org.spongepowered.api.entity.living.player.User;
 import org.spongepowered.api.event.Listener;
 import org.spongepowered.api.event.command.MessageSinkEvent;
 import org.spongepowered.api.event.game.state.GameInitializationEvent;
 import org.spongepowered.api.plugin.Plugin;
 import org.spongepowered.api.text.Text;
 import org.spongepowered.api.text.Texts;
+import org.spongepowered.api.text.chat.ChatTypes;
 import org.spongepowered.api.text.format.TextColor;
 import org.spongepowered.api.text.format.TextColors;
 import org.spongepowered.api.text.sink.MessageSink;
@@ -27,6 +29,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 // The @Plugin decorator fills out the plugin details for Sponge to understand
 @Plugin(id = "rp-chat", name = "Roleplay Chat Plugin", version = "1.0")
@@ -263,6 +266,81 @@ public class RPChatPlugin {
 		registerChatCommandWithFormat(commandAliases, minBlockRange, maxBlockRange, firstArgumentIsRange, commandDescription, true, "<%s> ", "%s", messageColor, false);
 	}
 
+	/**
+	 * Registers the "/pm" command with the server
+	 */
+	private void registerPrivateMessageCommand() {
+		CommandSpec cmdSpec = CommandSpec.builder()
+				.description(Texts.of("Sends a private message to another player."))
+				.arguments(
+						GenericArguments.onlyOne(GenericArguments.string(Texts.of("player"))),  // Player target (optionally partial name)
+						GenericArguments.remainingJoinedStrings(Texts.of("message"))            // Message to player
+				)
+				.executor(new CommandExecutor() {
+					@Override
+					public CommandResult execute(CommandSource src, CommandContext args) throws CommandException {
+
+						String targetPlayer = args.<String>getOne("player").get().toLowerCase();
+						String message = args.<String>getOne("message").get();
+
+						// Find all the players that match [targetPlayer] that doesn't include you
+						Set<Player> matchingPlayers = new HashSet<>();
+						for (Player player : game.getServer().getOnlinePlayers()) {
+							// Don't PM yourself
+							if (player != src && player.getName().toLowerCase().startsWith(targetPlayer)) {
+								matchingPlayers.add(player);
+							}
+						}
+
+						// Check for command errors
+						if (matchingPlayers.size() == 0) {
+
+							// No matching targets
+							String errorMsg = String.format("No players match your target [%s]", targetPlayer);
+							throw new CommandException(Texts.of(errorMsg));
+						} else if (matchingPlayers.size() > 1) {
+
+							// Too many possible targets
+							String matchingPlayerNames = String.join("\n", matchingPlayers.stream().map(Player::getName).collect(Collectors.toList()));
+							String errorMsg = String.format("More than one match for [%s]:\n%s", targetPlayer, matchingPlayerNames);
+							throw new CommandException(Texts.of(errorMsg));
+						}
+
+						// Get the receiving player
+						Player receivingPlayer = matchingPlayers.iterator().next();
+						String receivingPlayerName = receivingPlayer.getName();
+
+
+						// Handle the name of the sender in case of player or admin message/other
+						String senderName;
+
+						if (src instanceof Player) {
+							Player sourcePlayer = (Player)src;
+							senderName = sourcePlayer.getName();
+						} else {
+							senderName = "An unknown voice";
+						}
+
+						// Format the strings
+						String messageToTarget = String.format("%s tells you: %s", senderName, message);
+						String messageToSender = String.format("You tell %s: %s", receivingPlayerName, message);
+
+						// Color the text
+						Text messageToTargetText = Texts.of(messageToTarget).builder().color(TextColors.YELLOW).build();
+						Text messageToSenderText = Texts.of(messageToSender).builder().color(TextColors.YELLOW).build();
+
+						// Send the messages
+						src.sendMessage(messageToSenderText);
+						receivingPlayer.sendMessage(messageToTargetText);
+
+						return CommandResult.success();
+					}
+				}).build();
+
+		// Register the command
+		game.getCommandManager().register(this, cmdSpec, "pm");
+	}
+
 	// This event listener happens while the server is setting up
 	@Listener // <--- This decorator tells the Java compiler to assign listener functions to the server events
 	public void onServerInitializing(GameInitializationEvent event) {
@@ -292,6 +370,9 @@ public class RPChatPlugin {
 
 		// Do (custom range)
 		registerChatCommandWithFormat(Arrays.asList("dor"), 5, 500, true, "Do action [5-500 blocks]", false, "<%s>", "%s ", TextColors.DARK_AQUA, true);
+
+		// Private message
+		registerPrivateMessageCommand();
 	}
 
 	// This event listener happens when a regular chat message occurs
