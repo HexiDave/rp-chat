@@ -32,7 +32,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 // The @Plugin decorator fills out the plugin details for Sponge to understand
-@Plugin(id = "rp-chat", name = "Roleplay Chat Plugin", version = "1.0")
+@Plugin(id = "rp-chat", name = "Roleplay Chat Plugin", version = "1.1")
 public class RPChatPlugin {
 
 	@Inject // <--- This decorator signals the Java compiler to set "game" to the current Game instance
@@ -379,11 +379,18 @@ public class RPChatPlugin {
 	@Listener
 	public void onChat(MessageSinkEvent.Chat event) {
 
-		// Prevent the server from passing the message normally
-		event.setCancelled(true);
+		Object rootCause = event.getCause().root();
+
+		// Ignore non-player chat messages
+		if (!(rootCause instanceof Player)) {
+			return;
+		}
 
 		// Get the player that sent the chat message
 		Player playerEnt = (Player) event.getCause().root();
+
+		// Prevent the server from passing the message normally
+		event.setCancelled(true);
 
 		// Format the text for a default local chat message
 		Text message = getMessageText(playerEnt, true, "<%s> ", Texts.toPlain(event.getRawMessage()), "%s", TextColors.GRAY, false);
