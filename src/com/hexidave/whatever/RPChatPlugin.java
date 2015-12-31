@@ -379,6 +379,9 @@ public class RPChatPlugin {
 	@Listener
 	public void onChat(MessageSinkEvent.Chat event) {
 
+		if (event.getRawMessage() == null)
+			return;
+
 		Object rootCause = event.getCause().root();
 
 		// Ignore non-player chat messages
